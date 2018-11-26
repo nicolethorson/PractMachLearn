@@ -1,0 +1,105 @@
+
+# Practical Machine Learning - Prediction Assignment #
+
+### Introduction ###
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These types of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, we will use data from accelerometers on the belt, forearm, arm, and dumbbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+
+### Downloading the Data and Loading R Packages ###
+The data for this project comes from the following source:
+  http://web.archive.org/web/20161224072740/http:groupware.les.inf.puc.rio/br/har. We need to first load the packages we will be using in this project and download the data into dataframes. 
+
+```{r, echo=TRUE}
+
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(rattle)
+library(randomForest)
+
+download.file(url="http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",
+              destfile="pml-training.csv",method="curl")
+
+dt_training<- read.csv("pml-training.csv",
+                       na.strings=c("NA","#DIV/0!",""))
+
+download.file(url="http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",
+              destfile="pml-testing.csv",method="curl")
+
+dt_testing<- read.csv("pml-testing.csv",
+                      na.strings=c("NA","#DIV/0!",""))
+```
+
+### Cleaning the Data ###
+Next we will remove columns with NA values as well as features that are not in the testing set. We also remove the first 7 features, as they are related to the time-series and are not needed in this analysis. 
+``` {r, echo=TRUE}
+features<- names(dt_testing[,colSums(is.na(dt_testing))==0])[8:59]
+
+dt_training <- dt_training[,c(features,"classe")]
+dt_testing <- dt_testing[,c(features,"problem_id")]
+
+dim(dt_training);dim(dt_testing)
+```
+
+### Partitioning Data ###
+Next, we will partition the data into a training (60% of the data) and testing set (the remaining 40% of the data).
+``` {r, echo=TRUE}
+set.seed(12345)
+
+inTrain <- createDataPartition(dt_training$classe,
+                               p=0.6,list=FALSE)
+training<- dt_training[inTrain,]
+testing<- dt_training[-inTrain,]
+dim(training);dim(testing)
+```
+
+### Decision Tree Modeling ###
+Next, we will use Decision Tree Modeling as a prediction.
+
+``` {r, echo=TRUE}
+modFitDT<- rpart(classe~ .,data=training,
+                 method="class")
+fancyRpartPlot(modFitDT)
+
+set.seed(12345)
+
+prediction<- predict(modFitDT, testing, type="class")
+confusionMatrix(prediction, testing$classe)
+```
+
+### Random Forest Model ###
+Next, we will use Random Forest Modeling as a prediction. 
+``` {r, echo=TRUE}
+set.seed(12345)
+modFitRF <- randomForest(classe ~ ., data=training,
+                         ntree=1000)
+
+prediction<- predict(modFitRF, testing, type="class")
+confusionMatrix(prediction, testing$classe)
+```
+
+### Using the prediction modeling on testing data ###
+First, we will use the Decision Tree modeling as a predictor on the testing data, followed by using the Random Forest prediction..
+``` {r, echo=TRUE}
+predictionDT <- predict(modFitDT, dt_testing, type="class")
+predictionDT
+```
+
+``` {R, echo=TRUE}
+predictionRF<- predict(modFitRF, dt_testing, type="class")
+predictionRF
+```
+
+You can see the accuracy for the Decision Tree model is about 85%, and the accuracy for the Random Forest model is over 99%. Using the Random Forest model, we can expect the submitted test cases to almost always be correct. 
+
+Lastly, we will prepare the submission file for the 20 test cases.
+```{r, echo=TRUE}
+pml_write_files = function(x){
+  n=length(x)
+  for(i in 1:n){
+    filename=paste0("problem_id_",i,"txt")
+    write.table(x[i],file=filename, quote=FALSE, row.names=FALSE, col.names=FALSE)
+  }
+}
+pml_write_files(predictionRF)
+```
